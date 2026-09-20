@@ -1,0 +1,73 @@
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.pytest_tmp/
+.pytest_*/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.build/
+build/
+dist/
+node_modules/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Large model files and local runtimes
+models/
+tools/llama.cpp/
+*.gguf
+*.safetensors
+*.bin
+*.onnx
+*.pt
+*.pth
+
+# Private knowledge sources and generated artifacts
+data/knowledge/
+outputs/
+logs/
+*.log
+*.wav
+*.mp3
+*.mp4
+
+# Course material and other documents (keep only the public README)
+docs/
+*.md
+!README.md
+*.doc
+*.docx
+*.pdf
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.rar
+*.zip
+00_阶段任务书说明.txt
+
+# Temporary and backup files
+*.bak*
+*.tmp
+*.temp
+*~

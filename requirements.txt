@@ -1,0 +1,34 @@
+# Runtime baseline: Python 3.10 on Windows
+#
+# 推理后端：llama.cpp 的 llama-server（可执行文件，非 pip 依赖）。
+#   winget install ggml.llamacpp
+#   或从 https://github.com/ggml-org/llama.cpp/releases 下载 win-cuda/vulkan 包。
+#   项目会依次在 tools/llama.cpp/、D:/mm_ai_models/llama.cpp/、winget 目录、PATH
+#   中查找 llama-server；也可用环境变量 MMAI_LLAMA_SERVER 直接指定。
+#
+# 模型下载（一次性；建议用 hf CLI，文件 SHA256 与 HuggingFace 官方仓库一致）：
+#   hf download bartowski/Qwen_Qwen3.5-4B-GGUF Qwen_Qwen3.5-4B-IQ4_XS.gguf --local-dir models/qwen3.5-4b
+#   hf download Qwen/Qwen3-VL-4B-Instruct-GGUF Qwen3VL-4B-Instruct-Q4_K_M.gguf mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf --local-dir models/qwen3-vl-4b
+#
+# 国内网络可换 ModelScope 镜像（文件完全相同，已逐字节校验）：
+#   https://modelscope.cn/models/bartowski/Qwen_Qwen3.5-4B-GGUF
+#   https://modelscope.cn/models/Qwen/Qwen3-VL-4B-Instruct-GGUF
+numpy==1.26.4
+# Install GPU PyTorch separately from requirements-cuda.txt.
+funasr>=1.2,<2
+modelscope>=1.20,<2
+webrtcvad-wheels>=2.0.14
+PyAudio>=0.2.14
+opencv-python>=4.9,<5
+sentence-transformers>=3,<6
+faiss-cpu>=1.8,<2
+PyMuPDF>=1.24,<2
+python-docx>=1.1,<2
+edge-tts>=7,<8
+langid>=1.1.6
+pygame>=2.6,<3
+mediapipe==0.10.14
+PyQt5>=5.15,<6
+psutil>=6,<8
+pytest>=8,<10
+huggingface_hub>=0.30,<2   # 仅供 `hf download` 下载模型时使用
