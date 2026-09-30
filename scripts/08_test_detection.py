@@ -32,13 +32,13 @@ def main() -> int:
                 results = detector.process_frame(frame)
                 annotated = detector.draw_landmarks(frame, results)
                 hands = results["hands"].multi_hand_landmarks
-                if hands:
-                    gesture = recognizer.recognize(hands[0])
-                    if gesture:
-                        counts[gesture] += 1
-                        snapshot += 1
-                        write_image(PATHS["outputs"] / f"gesture_test_{snapshot}_{gesture}.jpg", annotated)
-                        print(f"识别手势: {gesture}")
+                gesture = recognizer.recognize(hands[0] if hands else None,
+                                               aspect_ratio=frame.shape[1] / frame.shape[0])
+                if gesture:
+                    counts[gesture] += 1
+                    snapshot += 1
+                    write_image(PATHS["outputs"] / f"gesture_test_{snapshot}_{gesture}.jpg", annotated)
+                    print(f"识别手势: {gesture}")
                 cv2.imshow("Detection test - Q to quit", annotated)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break

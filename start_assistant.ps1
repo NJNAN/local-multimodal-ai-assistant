@@ -1,22 +1,50 @@
-param([switch]$SmokeTest)
+param(
+    [switch]$SmokeTest,
+    [switch]$NoAudio,
+    [switch]$NoVideo,
+    [switch]$CheckEnvironment
+)
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Python = "D:\mm_ai_env\Scripts\python.exe"
+$Python = $env:MMAI_PYTHON
 
 Set-Location -LiteralPath $ProjectRoot
-if (-not (Test-Path -LiteralPath $Python)) {
-    throw "Python environment not found: $Python"
+if ($Python) {
+    if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
+        throw "MMAI_PYTHON points to a missing file: $Python"
+    }
+} else {
+    $Candidates = @(
+        (Join-Path $ProjectRoot '.venv\Scripts\python.exe'),
+        'D:\mm_ai_env\Scripts\python.exe'
+    )
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
+            $Python = $Candidate
+            break
+        }
+    }
+    if (-not $Python) {
+        $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
+        if ($PythonCommand) { $Python = $PythonCommand.Source }
+    }
+    if (-not $Python) {
+        throw 'Python not found. Create .venv or set MMAI_PYTHON to your python.exe.'
+    }
 }
 
-# llama.cpp（llama-server）与两个 GGUF 模型由环境检查统一验证。
-# 运行时按需加载模型，无需预先启动任何服务进程。
-& $Python "scripts\00_check_env.py"
-if ($LASTEXITCODE -ne 0) {
-    throw "Environment check failed. Review the messages above."
+# Keep this launcher ASCII for Windows PowerShell 5.1 encoding compatibility.
+# Optional dependency/hardware diagnostics; model servers load on demand.
+if ($CheckEnvironment) {
+    & $Python 'scripts\00_check_env.py'
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'Some checks failed. The assistant will try to start with available features.'
+    }
 }
-if ($SmokeTest) {
-    & $Python "main.py" "--smoke-test"
-} else {
-    & $Python "main.py"
-}
+$AssistantArgs = @('main.py')
+if ($SmokeTest) { $AssistantArgs += '--smoke-test' }
+if ($NoAudio) { $AssistantArgs += '--no-audio' }
+if ($NoVideo) { $AssistantArgs += '--no-video' }
+& $Python @AssistantArgs
+exit $LASTEXITCODE

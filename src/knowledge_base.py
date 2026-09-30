@@ -205,17 +205,26 @@ class VectorStore:
 
     def load(self, directory: str | Path) -> int:
         with self._lock:
-            self._ensure_backend()
             directory = Path(directory)
             index_path = directory / "index.faiss"
             docs_path = directory / "documents.json"
             if not index_path.exists() or not docs_path.exists():
                 return 0
+            self._ensure_backend()
             import numpy as np
 
             serialized = np.frombuffer(index_path.read_bytes(), dtype="uint8")
-            self.index = self._faiss.deserialize_index(serialized)
-            self.documents = json.loads(docs_path.read_text(encoding="utf-8"))
-            if self.index.ntotal != len(self.documents):
+            index = self._faiss.deserialize_index(serialized)
+            documents = json.loads(docs_path.read_text(encoding="utf-8"))
+            if not isinstance(documents, list) or any(
+                not isinstance(doc, dict) or not isinstance(doc.get("text"), str)
+                for doc in documents
+            ):
+                raise ValueError("知识库文档元数据格式无效")
+            if index.ntotal != len(documents):
                 raise ValueError("FAISS 索引与文档元数据数量不一致")
+            if index.d != self.dimension:
+                raise ValueError("FAISS 索引与嵌入模型维度不一致")
+            self.index = index
+            self.documents = documents
             return len(self.documents)

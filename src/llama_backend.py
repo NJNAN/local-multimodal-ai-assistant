@@ -28,6 +28,8 @@ import atexit
 import json
 import logging
 import os
+import re
+from functools import lru_cache
 import subprocess
 import threading
 import time
@@ -35,6 +37,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from .inference_options import InferenceOptions
 
 LOGGER = logging.getLogger(__name__)
 
@@ -136,6 +139,7 @@ class LlamaServer:
         fit_target_mb: int = 1024,
         keep_alive_seconds: int = 0,
         log_path: str | Path | None = None,
+        inference: dict | InferenceOptions | None = None,
     ):
         self.name = name
         self.server_path = server_path or ""
@@ -155,6 +159,7 @@ class LlamaServer:
         self._started_at: float | None = None
         self._log_handle = None
         self._lock = threading.RLock()
+        self.inference = inference if isinstance(inference, InferenceOptions) else InferenceOptions(**(inference or {}))
 
     # -- introspection -------------------------------------------------------
 
@@ -195,10 +200,13 @@ class LlamaServer:
         ]
         if self.fit:
             cmd += ["--fit", "on", "--fit-target", str(self.fit_target_mb)]
+        else:
+            cmd += ["--fit", "off"]
         if self.device:
             cmd += ["--device", self.device]
         if self.mmproj_path:
             cmd += ["--mmproj", str(self.mmproj_path)]
+        cmd += self.inference.arguments(vision=self.mmproj_path is not None)
         return cmd
 
     # -- lifecycle -----------------------------------------------------------
@@ -211,6 +219,13 @@ class LlamaServer:
             if missing:
                 raise FileNotFoundError("；".join(missing))
             cmd = self.build_command()
+            tuning = self.inference.arguments(vision=self.mmproj_path is not None)
+            if tuning:
+                help_text = server_help(self.server_path)
+                unsupported = [flag for flag in tuning if flag.startswith("--") and flag not in help_text]
+                if unsupported:
+                    raise RuntimeError(f"Installed llama-server does not support: {', '.join(unsupported)}")
+            self.inference.prepare_paths()
             log_handle = None
             log_target: Any = subprocess.DEVNULL
             if self.log_path:
@@ -245,7 +260,7 @@ class LlamaServer:
                 with opener.open(f"{self.base_url}/health", timeout=3) as response:
                     body = json.load(response)
                 if isinstance(body, dict) and body.get("status") == "ok":
-                    self.load_seconds = time.monotonic() - (self._started_at or time.monotonic())
+                    self.load_seconds = time.perf_counter() - (self._started_at or time.perf_counter())
                     return self.load_seconds
             except urllib.error.HTTPError:
                 pass  # 503 while the model is still loading → keep polling
@@ -289,6 +304,33 @@ class LlamaServer:
         except (urllib.error.URLError, OSError, ValueError):
             return {}
 
+    def metrics(self) -> dict:
+        """Read running server counters without loading a model."""
+        from .inference_metrics import parse_prometheus
+        if not self.is_running():
+            return {"available": False, "reason": "model_unloaded"}
+        try:
+            with _no_proxy_opener().open(f"{self.base_url}/metrics", timeout=3) as response:
+                return {"available": True, "samples": parse_prometheus(response.read().decode("utf-8"))}
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            return {"available": False, "reason": str(exc)}
+
+    def slot_action(self, action: str, filename: str | None = None, slot_id: int = 0) -> dict:
+        if action not in {"save", "restore", "erase"} or slot_id < 0:
+            raise ValueError("Invalid slot action or id")
+        if not self.is_running():
+            raise RuntimeError("Slot operations require a running model")
+        if self.inference.parallel is not None and slot_id >= self.inference.parallel:
+            raise ValueError("Slot id exceeds configured parallelism")
+        payload = {}
+        if action != "erase":
+            if not self.inference.slot_save_path:
+                raise ValueError("Configure slot_save_path before saving/restoring KV cache")
+            if not filename or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", filename) or ".." in filename:
+                raise ValueError("Cache filename must be a plain ASCII basename")
+            payload["filename"] = filename
+        return _http_json(f"{self.base_url}/slots/{slot_id}?action={action}", payload)
+
 
 def _http_json(url: str, payload: dict | None = None, timeout: float = 60) -> Any:
     opener = _no_proxy_opener()
@@ -301,6 +343,16 @@ def _http_json(url: str, payload: dict | None = None, timeout: float = 60) -> An
     )
     with opener.open(request, timeout=timeout) as response:
         return json.load(response)
+
+
+@lru_cache(maxsize=8)
+def server_help(server_path: str) -> str:
+    result = subprocess.run([server_path, "--help"], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=30,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if result.returncode:
+        raise RuntimeError("Cannot read installed llama-server capabilities")
+    return result.stdout + result.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -400,9 +452,23 @@ class LlamaServerManager:
                 "running": server.is_running(),
                 "missing": server.missing_files(),
                 "load_seconds": server.load_seconds,
+                "inflight": self._inflight.get(mode, 0),
+                "inference": vars(server.inference) if hasattr(server, "inference") else {},
             }
             for mode, server in self.servers.items()
         }
+
+    def slot_action(self, mode: str, action: str, filename: str | None = None, slot_id: int = 0) -> dict:
+        with self._lock:
+            if self._closing or self._inflight.get(mode, 0):
+                raise RuntimeError("Cannot mutate KV cache while a request is in flight or during shutdown")
+            return self.servers[mode].slot_action(action, filename, slot_id)
+
+    def save_slot(self, mode: str, filename: str, slot_id: int = 0) -> dict:
+        return self.slot_action(mode, "save", filename, slot_id)
+
+    def restore_slot(self, mode: str, filename: str, slot_id: int = 0) -> dict:
+        return self.slot_action(mode, "restore", filename, slot_id)
 
     # -- status / shutdown helpers -------------------------------------------
 
@@ -536,6 +602,8 @@ class LlamaCppClient:
         self._disable_thinking = bool(cfg.get("disable_thinking", False))
         self.timeout = float(timeout or config.get("request_timeout", 300))
         self._opener = _no_proxy_opener()
+        self.last_timings: dict = {}
+        self.last_usage: dict = {}
 
     # -- availability --------------------------------------------------------
 
@@ -568,11 +636,14 @@ class LlamaCppClient:
     # -- chat ----------------------------------------------------------------
 
     def chat(self, payload: dict) -> dict:
+        self.last_timings, self.last_usage = {}, {}
         self.manager.begin_request(self.mode)
         try:
             self.manager.ensure(self.mode)
             body = self._build_body(payload, stream=False)
             data = self._post("/v1/chat/completions", body)
+            self.last_timings = data.get("timings") or {}
+            self.last_usage = data.get("usage") or {}
             content = ""
             choices = data.get("choices") or []
             if choices:
@@ -586,11 +657,16 @@ class LlamaCppClient:
             self.manager.end_request(self.mode)
 
     def stream_chat(self, payload: dict):
+        self.last_timings, self.last_usage = {}, {}
         self.manager.begin_request(self.mode)
         try:
             self.manager.ensure(self.mode)
             body = self._build_body(payload, stream=True)
             for event in self._post_stream("/v1/chat/completions", body):
+                if event.get("timings"):
+                    self.last_timings = event["timings"]
+                if event.get("usage"):
+                    self.last_usage = event["usage"]
                 choices = event.get("choices") or []
                 if not choices:
                     continue
@@ -620,6 +696,11 @@ class LlamaCppClient:
             "stream": stream,
             "cache_prompt": True,
         }
+        for key in ("cache_prompt", "id_slot", "seed"):
+            if key in options:
+                body[key] = options[key]
+        if stream:
+            body["stream_options"] = {"include_usage": True}
         temperature = options.get("temperature")
         if temperature is not None:
             body["temperature"] = float(temperature)
@@ -737,6 +818,7 @@ def _build_servers(config: dict) -> dict[str, LlamaServer]:
             fit_target_mb=config.get("fit_target_mb", 1024),
             keep_alive_seconds=cfg.get("keep_alive_seconds", 0),
             log_path=Path(config.get("log_dir") or Path.cwd()) / f"llama_server_{mode}.log",
+            inference=cfg.get("inference"),
         )
     return servers
 

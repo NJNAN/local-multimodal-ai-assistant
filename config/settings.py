@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import random
 from pathlib import Path
+from src.inference_options import InferenceOptions
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SEED = int(os.getenv("MMAI_SEED", "42"))
@@ -100,6 +101,7 @@ LLAMA_CONFIG = {
         "device": os.getenv("MMAI_TEXT_DEVICE", ""),
         "disable_thinking": _env_flag("MMAI_TEXT_DISABLE_THINKING", True),
         "keep_alive_seconds": int(os.getenv("MMAI_TEXT_KEEP_ALIVE", "600")),
+        "inference": InferenceOptions.from_environment("MMAI_TEXT"),
     },
     # 视觉模型：Qwen3-VL-4B-Instruct Q4_K_M + Q8_0 mmproj（Qwen 官方 GGUF）
     "vision": {
@@ -122,6 +124,7 @@ LLAMA_CONFIG = {
         "device": os.getenv("MMAI_VL_DEVICE", ""),
         "disable_thinking": _env_flag("MMAI_VL_DISABLE_THINKING", False),
         "keep_alive_seconds": int(os.getenv("MMAI_VL_KEEP_ALIVE", "300")),
+        "inference": InferenceOptions.from_environment("MMAI_VL"),
     },
     # --fit 让 llama.cpp 根据当前设备显存自动决定 CPU/GPU offload 层数。
     "fit": _env_flag("MMAI_LLAMA_FIT", True),

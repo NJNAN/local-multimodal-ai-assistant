@@ -51,10 +51,14 @@ logs/
 *.mp3
 *.mp4
 
-# Course material and other documents (keep only the public README)
+# Course material and other documents (allow public project/evidence Markdown)
 docs/
 *.md
 !README.md
+!RESULTS.md
+!NEGATIVE-RESULTS.md
+!RESUME.md
+!benchmarks/README.md
 *.doc
 *.docx
 *.pdf

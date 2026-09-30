@@ -51,8 +51,8 @@ def build_components():
     manager.on_status = bridge.status.emit
     text_llm = TextLLM(MODEL_CONFIG["text"], client=create_text_client())
     vector_store = VectorStore(MODEL_CONFIG["embedding"])
-    rag = RAGPipeline(vector_store, text_llm)
     index_dir = PATHS["knowledge"] / ".index"
+    rag = RAGPipeline(vector_store, text_llm, index_dir=index_dir)
     try:
         loaded = vector_store.load(index_dir)
         if loaded:
@@ -141,12 +141,15 @@ def main() -> int:
     from PyQt5.QtWidgets import QApplication
 
     from src.gui import MainWindow
+    from src.qt_runtime import configure_qt_plugins
 
+    configure_qt_plugins()
     app = QApplication(sys.argv)
     bridge, service, video_capture, player = build_components()
     video_thread = None
     audio_thread = None
     detector = None
+    detector_error = ""
     startup_errors: list[str] = []
 
     if not args.no_video:
@@ -190,7 +193,9 @@ def main() -> int:
 
         detector = HumanDetector(model_complexity=1)  # 复杂度1检测约46ms/帧（复杂度2约94ms），配合采集线程更流畅
     except Exception as exc:
-        startup_errors.append(f"人体检测不可用: {exc}")
+        detector_error = str(exc)
+        startup_errors.append(f"人体与手势检测不可用: {exc}")
+        logging.getLogger(__name__).exception("人体与手势检测初始化失败")
 
     window = MainWindow(
         service,
@@ -198,6 +203,7 @@ def main() -> int:
         audio_thread=audio_thread,
         video_thread=video_thread,
         detector=detector,
+        detector_error=detector_error,
         gesture_recognizer=GestureRecognizer(),
         action_mapper=GestureActionMapper(),
         tts_player=player,

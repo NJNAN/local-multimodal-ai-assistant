@@ -11,14 +11,21 @@ class RAGPipeline:
         vector_store: VectorStore,
         text_llm,
         parser: DocumentParser | None = None,
+        index_dir: str | Path | None = None,
     ):
         self.vector_store = vector_store
         self.text_llm = text_llm
         self.parser = parser or DocumentParser()
+        self.index_dir = Path(index_dir) if index_dir is not None else None
 
     def import_document(self, file_path: str | Path) -> int:
         documents = self.parser.parse(file_path)
-        return self.vector_store.add_documents(documents)
+        if not documents:
+            raise ValueError("文档没有可提取的文字；扫描版 PDF 请先进行 OCR")
+        count = self.vector_store.add_documents(documents)
+        if count and self.index_dir is not None:
+            self.vector_store.save(self.index_dir)
+        return count
 
     def retrieve(self, query: str, k: int = 3) -> list[dict]:
         return self.vector_store.search(query, k)

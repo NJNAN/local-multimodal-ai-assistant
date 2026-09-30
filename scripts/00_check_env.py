@@ -64,7 +64,7 @@ def _camera_probe() -> str:
 
 def main() -> int:
     results = []
-    results.append(check("Python", lambda: platform.python_version() if sys.version_info[:2] == (3, 10) else (_ for _ in ()).throw(RuntimeError("需要 Python 3.10"))))
+    results.append(check("Python", lambda: platform.python_version() if sys.version_info[:2] in {(3, 10), (3, 11)} else (_ for _ in ()).throw(RuntimeError("需要 Python 3.10 或 3.11"))))
     modules = {
         "NumPy": "numpy",
         "PyAudio": "pyaudio",

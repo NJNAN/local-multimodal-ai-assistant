@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "text": [
+    {"id": "structured_extraction", "category": "extraction", "prompt": "从资料提取答案。资料：项目代号为 ORION，预算为 7300 元，参与者有 6 人。只输出 JSON，字段为 code、budget、people，不加解释。", "expected": {"code": "ORION", "budget": 7300, "people": 6}},
+    {"id": "fact_qa", "category": "facts", "prompt": "回答基础计算机知识，只输出 JSON：HTTP 默认端口存为 http_port；二进制 1010 的十进制值存为 decimal；FIFO 的英文全称存为 fifo。", "expected": {"http_port": 80, "decimal": 10, "fifo": "First In First Out"}},
+    {"id": "repetitive_copy", "category": "repetitive", "prompt": "逐字复制下面内容，保持所有行，不加说明，不加代码块：\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。", "expected_text": "本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。\n本地推理需要同时测量延迟、显存和正确率。"}
+  ],
+  "vision": [
+    {"id": "color_count", "category": "vision", "prompt": "只输出 JSON，字段 red_squares 是红色正方形的数量，blue_circles 是蓝色圆形的数量，green_triangles 是绿色三角形的数量。", "expected": {"red_squares": 2, "blue_circles": 1, "green_triangles": 1}},
+    {"id": "layout", "category": "vision", "prompt": "只输出 JSON。观察最上面一排，左边形状的颜色存为 left_color（red/blue/green），右边形状的颜色存为 right_color（red/blue/green）。", "expected": {"left_color": "red", "right_color": "blue"}}
+  ]
+}

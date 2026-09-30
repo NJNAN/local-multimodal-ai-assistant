@@ -1,0 +1,3 @@
+# Optional experiment plotting; the assistant runtime does not import these.
+matplotlib>=3.7,<4
+Pillow>=10,<13

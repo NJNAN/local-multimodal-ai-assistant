@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from contextlib import nullcontext
+import threading
+
+from .mediapipe_runtime import compatible_resources
 
 LOGGER = logging.getLogger(__name__)
 
@@ -18,28 +22,42 @@ class HumanDetector:
     ):
         try:
             import cv2
-            import mediapipe as mp
+            if mediapipe_module is None:
+                import mediapipe as mp
+            else:
+                mp = mediapipe_module
         except ImportError as exc:
             raise RuntimeError("缺少 opencv-python 或 mediapipe") from exc
         self.cv2 = cv2
-        self.mp = mediapipe_module or mp
+        self.mp = mp
+        self._lock = threading.RLock()
         solutions = self.mp.solutions
-        self.pose = solutions.pose.Pose(
-            static_image_mode=False,
-            model_complexity=model_complexity,
-            smooth_landmarks=True,
-            min_detection_confidence=min_detection_confidence,
-            min_tracking_confidence=min_tracking_confidence,
-        )
-        self.hands = solutions.hands.Hands(
-            static_image_mode=False,
-            max_num_hands=2,
-            min_detection_confidence=min_detection_confidence,
-            min_tracking_confidence=min_tracking_confidence,
-        )
-        self.face = solutions.face_detection.FaceDetection(
-            model_selection=0, min_detection_confidence=min_detection_confidence
-        )
+        self.pose = self.hands = self.face = None
+        try:
+            # Preserve MediaPipe's optional lite/heavy model download, and cache
+            # it before native graphs start looking up their resources.
+            if mediapipe_module is None and model_complexity in {0, 2}:
+                solutions.pose._download_oss_pose_landmark_model(model_complexity)
+            with (compatible_resources(self.mp) if mediapipe_module is None else nullcontext()):
+                self.pose = solutions.pose.Pose(
+                    static_image_mode=False,
+                    model_complexity=model_complexity,
+                    smooth_landmarks=True,
+                    min_detection_confidence=min_detection_confidence,
+                    min_tracking_confidence=min_tracking_confidence,
+                )
+                self.hands = solutions.hands.Hands(
+                    static_image_mode=False,
+                    max_num_hands=2,
+                    min_detection_confidence=min_detection_confidence,
+                    min_tracking_confidence=min_tracking_confidence,
+                )
+                self.face = solutions.face_detection.FaceDetection(
+                    model_selection=0, min_detection_confidence=min_detection_confidence
+                )
+        except Exception:
+            self.close()
+            raise
         self.history = deque(maxlen=self.MAX_HISTORY)
 
     def process_frame(self, bgr_image) -> dict:
@@ -47,12 +65,13 @@ class HumanDetector:
             raise ValueError("输入图像不能为空")
         rgb = self.cv2.cvtColor(bgr_image, self.cv2.COLOR_BGR2RGB)
         rgb.flags.writeable = False
-        pose_result = self.pose.process(rgb)
-        hands_result = self.hands.process(rgb)
-        face_result = self.face.process(rgb)
-        pose_landmarks = getattr(pose_result, "pose_landmarks", None)
-        if pose_landmarks:
-            self._remember_pose(pose_landmarks)
+        with self._lock:
+            pose_result = self.pose.process(rgb)
+            hands_result = self.hands.process(rgb)
+            face_result = self.face.process(rgb)
+            pose_landmarks = getattr(pose_result, "pose_landmarks", None)
+            if pose_landmarks:
+                self._remember_pose(pose_landmarks)
         return {"pose": pose_result, "hands": hands_result, "face": face_result}
 
     def draw_landmarks(self, image, results: dict):
@@ -115,7 +134,10 @@ class HumanDetector:
         return bool(mean_displacement < threshold)
 
     def close(self) -> None:
-        for model in (self.pose, self.hands, self.face):
-            close = getattr(model, "close", None)
-            if close:
-                close()
+        with self._lock:
+            for name in ("pose", "hands", "face"):
+                model = getattr(self, name, None)
+                close = getattr(model, "close", None)
+                if close:
+                    close()
+                setattr(self, name, None)

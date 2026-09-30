@@ -14,6 +14,10 @@ try:
         mode_changed = pyqtSignal(str)
         knowledge_imported = pyqtSignal(str)
         user_query = pyqtSignal(str)
+        response_details = pyqtSignal(object)
+        request_started = pyqtSignal(object)
+        detection_status = pyqtSignal(object)
+        gesture_analysis = pyqtSignal(object)
 
 except ImportError:
 
@@ -41,5 +45,9 @@ except ImportError:
                 "mode_changed",
                 "knowledge_imported",
                 "user_query",
+                "response_details",
+                "request_started",
+                "detection_status",
+                "gesture_analysis",
             ):
                 setattr(self, name, _Signal())

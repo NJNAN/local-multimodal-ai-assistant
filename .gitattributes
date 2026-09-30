@@ -1,0 +1,12 @@
+# Preserve measured source/case bytes across Windows and Linux checkouts.
+src/llama_backend.py text eol=crlf
+src/inference_options.py text eol=lf
+src/inference_metrics.py text eol=lf
+src/benchmarking.py text eol=lf
+scripts/14_inference_bench.py text eol=lf
+benchmarks/cases.json text eol=lf
+benchmarks/results/*.json text eol=lf
+benchmarks/results/*.svg -whitespace
+RESULTS.md text eol=lf
+NEGATIVE-RESULTS.md text eol=lf
+RESUME.md text eol=lf
