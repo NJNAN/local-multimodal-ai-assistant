@@ -44,6 +44,7 @@ tools/llama.cpp/
 
 # Private knowledge sources and generated artifacts
 data/knowledge/
+data/hotwords.json
 outputs/
 logs/
 *.log
@@ -53,11 +54,15 @@ logs/
 
 # Course material and other documents (allow public project/evidence Markdown)
 docs/
+!docs/
+docs/*
+!docs/界面与热词使用指南.md
 *.md
 !README.md
 !RESULTS.md
 !NEGATIVE-RESULTS.md
 !RESUME.md
+!docs/界面与热词使用指南.md
 !benchmarks/README.md
 *.doc
 *.docx
